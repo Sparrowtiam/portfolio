@@ -505,7 +505,6 @@ with st.sidebar.expander("SACCO Contribution"):
     eoy = get_end_of_year_totals()
     eoy_df = pd.DataFrame({"Asset": list(eoy.keys()), "Projected Value": list(eoy.values())})
     st.table(eoy_df)
-                    st.experimental_rerun()
 with st.sidebar.expander("Money Market Fund"):
     mmf_df = fetch_table('mmf')
     with st.form("mmf_form_sidebar", clear_on_submit=True):
