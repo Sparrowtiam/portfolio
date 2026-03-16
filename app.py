@@ -355,9 +355,45 @@ st.sidebar.header("Add / Edit Investments")
 if st.sidebar.button("🔄 Refresh Portfolio Figures"):
     st.experimental_rerun()
 
+
+# --- SACCO Monthly Contribution Entry ---
 with st.sidebar.expander("SACCO Contribution"):
-    # --- Main Dashboard Layout ---
-    st.subheader("Portfolio Overview")
+    sacco_df = fetch_table('sacco')
+    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    current_year = datetime.now().year
+    # User selects month and year
+    with st.form("sacco_form_sidebar", clear_on_submit=True):
+        month = st.selectbox("Month", months, key="sacco_month")
+        year = st.number_input("Year", min_value=2020, max_value=current_year, value=current_year, key="sacco_year")
+        contribution = st.number_input("Contribution (KES)", min_value=0.0, value=0.0, step=100.0, key="sacco_contrib")
+        submitted = st.form_submit_button("Add/Update Contribution")
+        if submitted and contribution > 0:
+            conn = get_connection()
+            # If entry exists for month/year, update, else insert
+            cur = conn.execute("SELECT id FROM sacco WHERE month=? AND year=?", (month, year))
+            row = cur.fetchone()
+            if row:
+                conn.execute("UPDATE sacco SET contribution=? WHERE id=?", (contribution, row[0]))
+            else:
+                conn.execute("INSERT INTO sacco (month, year, contribution) VALUES (?, ?, ?)", (month, year, contribution))
+            conn.commit()
+            conn.close()
+            st.success(f"Saved {contribution} KES for {month} {year}")
+            st.experimental_rerun()
+    # Edit/Delete options
+    if not sacco_df.empty:
+        st.write("#### Edit/Delete Contributions")
+        for idx, row in sacco_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['month']} {row['year']}: {row['contribution']} KES")
+            with col2:
+                if st.button(f"Delete", key=f"del_sacco_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM sacco WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 
     def get_end_of_year_totals():
         # Calculate end-of-year totals for each asset class
@@ -416,47 +452,75 @@ with st.sidebar.expander("SACCO Contribution"):
             'Stocks': stocks_val
         }
 
-    def get_portfolio_summary():
-        # ...existing code for current totals...
-        sacco_df = fetch_table('sacco') if toggles.get('SACCO', True) else pd.DataFrame()
-        bonds_df = fetch_table('bonds') if toggles.get('Bonds', True) else pd.DataFrame()
-        crypto_df = fetch_table('crypto') if toggles.get('Crypto', True) else pd.DataFrame()
-        mmf_df = fetch_table('mmf') if toggles.get('MMF', True) else pd.DataFrame()
-        stocks_df = fetch_table('stocks') if toggles.get('Stocks', True) else pd.DataFrame()
-        # SACCO
-        sacco_val = 0
-        if not sacco_df.empty:
-            months = len(sacco_df)
-            total_contrib = sacco_df['contribution'].sum()
-            interest_rate = sacco_df['interest_rate'].iloc[0] if 'interest_rate' in sacco_df else 0.13
-            sacco_val = total_contrib * (1 + interest_rate * months / 12)
-        # Bonds
-        bonds_val = 0
-        if not bonds_df.empty:
-            bonds_df['interest'] = bonds_df['principal'] * (bonds_df['rate'] / 100) * (bonds_df['duration_months'] / 12)
-            bonds_val = bonds_df['principal'].sum() + bonds_df['interest'].sum()
-        # Crypto (USD to KES, assume 1 USD = 150 KES for now)
-        crypto_val = 0
-        if not crypto_df.empty:
-            symbols = crypto_df['symbol'].unique().tolist()
-            prices = {s: 0 for s in symbols}
-            try:
-                prices = fetch_crypto_prices(symbols)
-            except Exception:
-                pass
-            crypto_df['current_price'] = crypto_df['symbol'].apply(lambda s: prices.get(s.upper(), 0))
-            crypto_df['market_value'] = crypto_df['amount'] * crypto_df['current_price']
-            crypto_val = crypto_df['market_value'].sum() * 150
-        # MMF
-        mmf_val = 0
-        if not mmf_df.empty:
-            row = mmf_df.iloc[0]
-            principal = row['balance']
-            annual_rate = row['annual_rate']
-            last_update = pd.to_datetime(row['last_update'])
-            days = (datetime.now() - last_update).days
-            daily_rate = annual_rate / 100 / 365
-            mmf_val = principal * ((1 + daily_rate) ** days)
+
+    # --- Monthly PnL Tracking Table with End-of-Year Totals ---
+    def get_monthly_pnl():
+        months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "End of Year Total"]
+        data = {"Month": months}
+        # Only include enabled asset classes
+        if toggles.get('SACCO', True):
+            sacco_df = fetch_table('sacco')
+            sacco_pnl = [sacco_df[sacco_df['month'] == m]['contribution'].sum() if not sacco_df.empty else 0 for m in months[:-1]]
+            # End of year total for SACCO
+            total_contrib = sacco_df['contribution'].sum() if not sacco_df.empty else 0
+            interest_rate = sacco_df['interest_rate'].iloc[0] if (not sacco_df.empty and 'interest_rate' in sacco_df) else 0.13
+            months_count = len(sacco_df)
+            eoy_total = total_contrib * (1 + interest_rate * months_count / 12)
+            sacco_pnl.append(eoy_total)
+            data['SACCO'] = sacco_pnl
+        if toggles.get('Bonds', True):
+            bonds_df = fetch_table('bonds')
+            bonds_pnl = [bonds_df['principal'].sum() * (bonds_df['rate'].mean()/100/12) if not bonds_df.empty else 0 for _ in months[:-1]]
+            # End of year total for Bonds
+            bonds_df['interest'] = bonds_df['principal'] * (bonds_df['rate'] / 100) * (bonds_df['duration_months'] / 12) if not bonds_df.empty else 0
+            eoy_total = bonds_df['principal'].sum() + bonds_df['interest'].sum() if not bonds_df.empty else 0
+            bonds_pnl.append(eoy_total)
+            data['Bonds'] = bonds_pnl
+        if toggles.get('Crypto', True):
+            crypto_df = fetch_table('crypto')
+            crypto_val = 0
+            if not crypto_df.empty:
+                symbols = crypto_df['symbol'].unique().tolist()
+                prices = {s: 0 for s in symbols}
+                try:
+                    prices = fetch_crypto_prices(symbols)
+                except Exception:
+                    pass
+                crypto_df['current_price'] = crypto_df['symbol'].apply(lambda s: prices.get(s.upper(), 0))
+                crypto_df['market_value'] = crypto_df['amount'] * crypto_df['current_price']
+                crypto_val = crypto_df['market_value'].sum() * 150
+            crypto_pnl = [crypto_val if i == datetime.now().month-1 else 0 for i in range(12)]
+            crypto_pnl.append(crypto_val)
+            data['Crypto'] = crypto_pnl
+        if toggles.get('MMF', True):
+            mmf_df = fetch_table('mmf')
+            mmf_interest = 0
+            mmf_val = 0
+            if not mmf_df.empty:
+                row = mmf_df.iloc[0]
+                mmf_interest = row['balance'] * (row['annual_rate']/100/12)
+                principal = row['balance']
+                annual_rate = row['annual_rate']
+                last_update = pd.to_datetime(row['last_update'])
+                days = (pd.to_datetime(f"{datetime.now().year}-12-31") - last_update).days
+                daily_rate = annual_rate / 100 / 365
+                mmf_val = principal * ((1 + daily_rate) ** days)
+            mmf_pnl = [mmf_interest for _ in range(12)]
+            mmf_pnl.append(mmf_val)
+            data['MMF'] = mmf_pnl
+        if toggles.get('Stocks', True):
+            stocks_df = fetch_table('stocks')
+            stocks_pnl = 0
+            stocks_val = 0
+            if not stocks_df.empty:
+                stocks_df['pnl'] = (stocks_df['current_price'] - stocks_df['purchase_price']) * stocks_df['shares']
+                stocks_pnl = stocks_df['pnl'].sum()
+                stocks_df['market_value'] = stocks_df['shares'] * stocks_df['current_price']
+                stocks_val = stocks_df['market_value'].sum()
+            stocks_pnl_list = [stocks_pnl if i == datetime.now().month-1 else 0 for i in range(12)]
+            stocks_pnl_list.append(stocks_val)
+            data['Stocks'] = stocks_pnl_list
+        return pd.DataFrame(data)
         # Stocks
         stocks_val = 0
         stocks_pnl = 0
