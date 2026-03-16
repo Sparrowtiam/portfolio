@@ -346,8 +346,15 @@ st.dataframe(get_monthly_pnl())
 # --- Investment Entry Form (placeholder) ---
 
 
+from streamlit_extras.app_refresh import st_button as st_refresh_button
+
 # --- Investment Entry/Edit Forms (Sidebar) ---
 st.sidebar.header("Add / Edit Investments")
+
+# --- Refresh Button ---
+if st.sidebar.button("🔄 Refresh Portfolio Figures"):
+    st.experimental_rerun()
+
 with st.sidebar.expander("SACCO Contribution"):
     sacco_df = fetch_table('sacco')
     with st.form("sacco_form", clear_on_submit=True):
@@ -364,7 +371,22 @@ with st.sidebar.expander("SACCO Contribution"):
             conn.close()
             st.success(f"Added {contribution} KES for {month} {year}")
             st.experimental_rerun()
+    # Edit/Delete options
+    if not sacco_df.empty:
+        st.write("#### Edit/Delete Contributions")
+        for idx, row in sacco_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['month']} {row['year']}: {row['contribution']} KES")
+            with col2:
+                if st.button(f"Delete", key=f"del_sacco_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM sacco WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 with st.sidebar.expander("Government Bond"):
+    bonds_df = fetch_table('bonds')
     with st.form("bonds_form_sidebar", clear_on_submit=True):
         name = st.text_input("Bond Name", value="Sample Bond", key="bond_name")
         principal = st.number_input("Principal (KES)", min_value=0.0, value=0.0, step=1000.0, key="bond_principal")
@@ -379,7 +401,22 @@ with st.sidebar.expander("Government Bond"):
             conn.close()
             st.success(f"Added bond {name} with {principal} KES at {rate}%")
             st.experimental_rerun()
+    # Edit/Delete options
+    if not bonds_df.empty:
+        st.write("#### Edit/Delete Bonds")
+        for idx, row in bonds_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['name']} | {row['principal']} KES @ {row['rate']}%")
+            with col2:
+                if st.button(f"Delete", key=f"del_bond_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM bonds WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 with st.sidebar.expander("Cryptocurrency"):
+    crypto_df = fetch_table('crypto')
     with st.form("crypto_form_sidebar", clear_on_submit=True):
         symbol = st.text_input("Symbol (e.g. BTC)", value="BTC", key="crypto_symbol")
         amount = st.number_input("Amount Held", min_value=0.0, value=0.0, step=0.01, key="crypto_amount")
@@ -392,7 +429,22 @@ with st.sidebar.expander("Cryptocurrency"):
             conn.close()
             st.success(f"Added {amount} {symbol.upper()} at ${purchase_price}")
             st.experimental_rerun()
+    # Edit/Delete options
+    if not crypto_df.empty:
+        st.write("#### Edit/Delete Crypto Holdings")
+        for idx, row in crypto_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['symbol']}: {row['amount']} @ ${row['purchase_price']}")
+            with col2:
+                if st.button(f"Delete", key=f"del_crypto_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM crypto WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 with st.sidebar.expander("Money Market Fund"):
+    mmf_df = fetch_table('mmf')
     with st.form("mmf_form_sidebar", clear_on_submit=True):
         name = st.text_input("Fund Name", value="Etica Money Market Fund", key="mmf_name")
         balance = st.number_input("Balance (KES)", min_value=0.0, value=0.0, step=100.0, key="mmf_balance")
@@ -407,7 +459,22 @@ with st.sidebar.expander("Money Market Fund"):
             conn.close()
             st.success(f"MMF updated: {balance} KES at {annual_rate}% annual rate")
             st.experimental_rerun()
+    # Edit/Delete options
+    if not mmf_df.empty:
+        st.write("#### Edit/Delete MMF")
+        for idx, row in mmf_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['name']}: {row['balance']} KES @ {row['annual_rate']}%")
+            with col2:
+                if st.button(f"Delete", key=f"del_mmf_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM mmf WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 with st.sidebar.expander("Stock"):
+    stocks_df = fetch_table('stocks')
     with st.form("stocks_form_sidebar", clear_on_submit=True):
         ticker = st.text_input("Ticker (e.g. KGN.NR, AAPL)", value="KGN.NR", key="stock_ticker")
         shares = st.number_input("Shares", min_value=0.0, value=0.0, step=1.0, key="stock_shares")
@@ -421,6 +488,20 @@ with st.sidebar.expander("Stock"):
             conn.close()
             st.success(f"Added {shares} shares of {ticker.upper()} at {purchase_price} KES")
             st.experimental_rerun()
+    # Edit/Delete options
+    if not stocks_df.empty:
+        st.write("#### Edit/Delete Stocks")
+        for idx, row in stocks_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['ticker']}: {row['shares']} @ {row['purchase_price']} KES (Current: {row['current_price']} KES)")
+            with col2:
+                if st.button(f"Delete", key=f"del_stock_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM stocks WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 
 # --- Main App Body ---
 
