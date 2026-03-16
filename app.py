@@ -1,3 +1,11 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import sqlite3
+import requests
+from datetime import datetime, timedelta
+from sklearn.linear_model import LinearRegression
+
 # --- Bonds Input Form (Sidebar) ---
 with st.sidebar.expander("Government Bond"):
     bonds_df = fetch_table('bonds')
