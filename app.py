@@ -1,3 +1,64 @@
+# --- Bonds Input Form (Sidebar) ---
+with st.sidebar.expander("Government Bond"):
+    bonds_df = fetch_table('bonds')
+    with st.form("bonds_form_sidebar", clear_on_submit=True):
+        name = st.text_input("Bond Name", value="Sample Bond", key="bond_name")
+        principal = st.number_input("Principal (KES)", min_value=0.0, value=0.0, step=1000.0, key="bond_principal")
+        rate = st.number_input("Interest Rate (%)", min_value=0.0, value=12.8, step=0.01, key="bond_rate")
+        start_date = st.date_input("Start Date", value=datetime.now(), key="bond_start")
+        duration_months = st.number_input("Duration (months)", min_value=1, value=12, step=1, key="bond_duration")
+        submitted = st.form_submit_button("Add Bond")
+        if submitted and principal > 0:
+            conn = get_connection()
+            conn.execute("INSERT INTO bonds (name, principal, rate, start_date, duration_months) VALUES (?, ?, ?, ?, ?)", (name, principal, rate, start_date.strftime('%Y-%m-%d'), duration_months))
+            conn.commit()
+            conn.close()
+            st.success(f"Added bond {name} with {principal} KES at {rate}%")
+            st.experimental_rerun()
+    # Edit/Delete options
+    if not bonds_df.empty:
+        st.write("#### Edit/Delete Bonds")
+        for idx, row in bonds_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['name']} | {row['principal']} KES @ {row['rate']}%")
+            with col2:
+                if st.button(f"Delete", key=f"del_bond_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM bonds WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
+
+# --- Crypto Input Form (Sidebar) ---
+with st.sidebar.expander("Cryptocurrency"):
+    crypto_df = fetch_table('crypto')
+    with st.form("crypto_form_sidebar", clear_on_submit=True):
+        symbol = st.text_input("Symbol (e.g. BTC)", value="BTC", key="crypto_symbol")
+        amount = st.number_input("Amount Held", min_value=0.0, value=0.0, step=0.01, key="crypto_amount")
+        purchase_price = st.number_input("Purchase Price (USD)", min_value=0.0, value=0.0, step=0.01, key="crypto_price")
+        submitted = st.form_submit_button("Add Crypto")
+        if submitted and amount > 0:
+            conn = get_connection()
+            conn.execute("INSERT INTO crypto (symbol, amount, purchase_price) VALUES (?, ?, ?)", (symbol.upper(), amount, purchase_price))
+            conn.commit()
+            conn.close()
+            st.success(f"Added {amount} {symbol.upper()} at ${purchase_price}")
+            st.experimental_rerun()
+    # Edit/Delete options
+    if not crypto_df.empty:
+        st.write("#### Edit/Delete Crypto Holdings")
+        for idx, row in crypto_df.iterrows():
+            col1, col2 = st.columns([3,1])
+            with col1:
+                st.write(f"{row['symbol']}: {row['amount']} @ ${row['purchase_price']}")
+            with col2:
+                if st.button(f"Delete", key=f"del_crypto_{row['id']}"):
+                    conn = get_connection()
+                    conn.execute("DELETE FROM crypto WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.experimental_rerun()
 # --- AI Analytics & Predictive Insights ---
 def ai_analytics_section():
     st.header("AI Analytics & Predictive Insights")
@@ -25,6 +86,36 @@ def ai_analytics_section():
         next_shares = X.max() + 10
         price_pred = model.predict([[next_shares]])[0]
         st.info(f"AI Forecast: If you increase your largest stock holding by 10 shares, expected price: {price_pred:,.2f} KES")
+    # Bonds forecast
+    bonds_df = fetch_table('bonds')
+    if not bonds_df.empty and len(bonds_df) > 2:
+        bonds_df = bonds_df.sort_values('duration_months')
+        X = bonds_df['duration_months'].values.reshape(-1, 1)
+        y = bonds_df['principal'].values
+        model = LinearRegression().fit(X, y)
+        next_duration = X.max() + 12
+        principal_pred = model.predict([[next_duration]])[0]
+        st.info(f"AI Forecast: If you buy a bond for {next_duration} months, expected principal: {principal_pred:,.2f} KES")
+    # Crypto forecast
+    crypto_df = fetch_table('crypto')
+    if not crypto_df.empty and len(crypto_df) > 2:
+        crypto_df = crypto_df.sort_values('symbol')
+        X = crypto_df['amount'].values.reshape(-1, 1)
+        y = crypto_df['purchase_price'].values
+        model = LinearRegression().fit(X, y)
+        next_amount = X.max() + 1
+        price_pred = model.predict([[next_amount]])[0]
+        st.info(f"AI Forecast: If you increase your largest crypto holding by 1 unit, expected price: ${price_pred:,.2f}")
+    # MMF forecast
+    mmf_df = fetch_table('mmf')
+    if not mmf_df.empty and len(mmf_df) > 2:
+        mmf_df = mmf_df.sort_values('annual_rate')
+        X = mmf_df['annual_rate'].values.reshape(-1, 1)
+        y = mmf_df['balance'].values
+        model = LinearRegression().fit(X, y)
+        next_rate = X.max() + 1
+        balance_pred = model.predict([[next_rate]])[0]
+        st.info(f"AI Forecast: If MMF annual rate increases to {next_rate:.2f}%, expected balance: {balance_pred:,.2f} KES")
 
 # --- Stocks Section ---
 def stocks_section():
