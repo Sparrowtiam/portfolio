@@ -346,7 +346,7 @@ st.dataframe(get_monthly_pnl())
 # --- Investment Entry Form (placeholder) ---
 
 
-from streamlit_extras.app_refresh import st_button as st_refresh_button
+
 
 # --- Investment Entry/Edit Forms (Sidebar) ---
 st.sidebar.header("Add / Edit Investments")
@@ -356,92 +356,155 @@ if st.sidebar.button("🔄 Refresh Portfolio Figures"):
     st.experimental_rerun()
 
 with st.sidebar.expander("SACCO Contribution"):
-    sacco_df = fetch_table('sacco')
-    with st.form("sacco_form", clear_on_submit=True):
-        month = st.selectbox("Month", [
-            "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-        ], key="sacco_month")
-        year = st.number_input("Year", min_value=2020, max_value=datetime.now().year, value=datetime.now().year, key="sacco_year")
-        contribution = st.number_input("Contribution (KES)", min_value=0.0, value=0.0, step=100.0, key="sacco_contrib")
-        submitted = st.form_submit_button("Add Contribution")
-        if submitted and contribution > 0:
-            conn = get_connection()
-            conn.execute("INSERT INTO sacco (month, year, contribution) VALUES (?, ?, ?)", (month, year, contribution))
-            conn.commit()
-            conn.close()
-            st.success(f"Added {contribution} KES for {month} {year}")
-            st.experimental_rerun()
-    # Edit/Delete options
-    if not sacco_df.empty:
-        st.write("#### Edit/Delete Contributions")
-        for idx, row in sacco_df.iterrows():
-            col1, col2 = st.columns([3,1])
-            with col1:
-                st.write(f"{row['month']} {row['year']}: {row['contribution']} KES")
-            with col2:
-                if st.button(f"Delete", key=f"del_sacco_{row['id']}"):
-                    conn = get_connection()
-                    conn.execute("DELETE FROM sacco WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
-                    st.experimental_rerun()
-with st.sidebar.expander("Government Bond"):
-    bonds_df = fetch_table('bonds')
-    with st.form("bonds_form_sidebar", clear_on_submit=True):
-        name = st.text_input("Bond Name", value="Sample Bond", key="bond_name")
-        principal = st.number_input("Principal (KES)", min_value=0.0, value=0.0, step=1000.0, key="bond_principal")
-        rate = st.number_input("Interest Rate (%)", min_value=0.0, value=12.8, step=0.01, key="bond_rate")
-        start_date = st.date_input("Start Date", value=datetime.now(), key="bond_start")
-        duration_months = st.number_input("Duration (months)", min_value=1, value=12, step=1, key="bond_duration")
-        submitted = st.form_submit_button("Add Bond")
-        if submitted and principal > 0:
-            conn = get_connection()
-            conn.execute("INSERT INTO bonds (name, principal, rate, start_date, duration_months) VALUES (?, ?, ?, ?, ?)", (name, principal, rate, start_date.strftime('%Y-%m-%d'), duration_months))
-            conn.commit()
-            conn.close()
-            st.success(f"Added bond {name} with {principal} KES at {rate}%")
-            st.experimental_rerun()
-    # Edit/Delete options
-    if not bonds_df.empty:
-        st.write("#### Edit/Delete Bonds")
-        for idx, row in bonds_df.iterrows():
-            col1, col2 = st.columns([3,1])
-            with col1:
-                st.write(f"{row['name']} | {row['principal']} KES @ {row['rate']}%")
-            with col2:
-                if st.button(f"Delete", key=f"del_bond_{row['id']}"):
-                    conn = get_connection()
-                    conn.execute("DELETE FROM bonds WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
-                    st.experimental_rerun()
-with st.sidebar.expander("Cryptocurrency"):
-    crypto_df = fetch_table('crypto')
-    with st.form("crypto_form_sidebar", clear_on_submit=True):
-        symbol = st.text_input("Symbol (e.g. BTC)", value="BTC", key="crypto_symbol")
-        amount = st.number_input("Amount Held", min_value=0.0, value=0.0, step=0.01, key="crypto_amount")
-        purchase_price = st.number_input("Purchase Price (USD)", min_value=0.0, value=0.0, step=0.01, key="crypto_price")
-        submitted = st.form_submit_button("Add Crypto")
-        if submitted and amount > 0:
-            conn = get_connection()
-            conn.execute("INSERT INTO crypto (symbol, amount, purchase_price) VALUES (?, ?, ?)", (symbol.upper(), amount, purchase_price))
-            conn.commit()
-            conn.close()
-            st.success(f"Added {amount} {symbol.upper()} at ${purchase_price}")
-            st.experimental_rerun()
-    # Edit/Delete options
-    if not crypto_df.empty:
-        st.write("#### Edit/Delete Crypto Holdings")
-        for idx, row in crypto_df.iterrows():
-            col1, col2 = st.columns([3,1])
-            with col1:
-                st.write(f"{row['symbol']}: {row['amount']} @ ${row['purchase_price']}")
-            with col2:
-                if st.button(f"Delete", key=f"del_crypto_{row['id']}"):
-                    conn = get_connection()
-                    conn.execute("DELETE FROM crypto WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
+    # --- Main Dashboard Layout ---
+    st.subheader("Portfolio Overview")
+
+    def get_end_of_year_totals():
+        # Calculate end-of-year totals for each asset class
+        sacco_df = fetch_table('sacco') if toggles.get('SACCO', True) else pd.DataFrame()
+        bonds_df = fetch_table('bonds') if toggles.get('Bonds', True) else pd.DataFrame()
+        crypto_df = fetch_table('crypto') if toggles.get('Crypto', True) else pd.DataFrame()
+        mmf_df = fetch_table('mmf') if toggles.get('MMF', True) else pd.DataFrame()
+        stocks_df = fetch_table('stocks') if toggles.get('Stocks', True) else pd.DataFrame()
+        # SACCO
+        sacco_val = 0
+        if not sacco_df.empty:
+            months = 12
+            total_contrib = sacco_df['contribution'].sum()
+            interest_rate = sacco_df['interest_rate'].iloc[0] if 'interest_rate' in sacco_df else 0.13
+            sacco_val = total_contrib * (1 + interest_rate * months / 12)
+        # Bonds
+        bonds_val = 0
+        if not bonds_df.empty:
+            bonds_df['interest'] = bonds_df['principal'] * (bonds_df['rate'] / 100) * (bonds_df['duration_months'] / 12)
+            bonds_val = bonds_df['principal'].sum() + bonds_df['interest'].sum()
+        # Crypto (USD to KES, assume 1 USD = 150 KES for now)
+        crypto_val = 0
+        if not crypto_df.empty:
+            symbols = crypto_df['symbol'].unique().tolist()
+            prices = {s: 0 for s in symbols}
+            try:
+                prices = fetch_crypto_prices(symbols)
+            except Exception:
+                pass
+            crypto_df['current_price'] = crypto_df['symbol'].apply(lambda s: prices.get(s.upper(), 0))
+            crypto_df['market_value'] = crypto_df['amount'] * crypto_df['current_price']
+            crypto_val = crypto_df['market_value'].sum() * 150
+        # MMF
+        mmf_val = 0
+        if not mmf_df.empty:
+            row = mmf_df.iloc[0]
+            principal = row['balance']
+            annual_rate = row['annual_rate']
+            last_update = pd.to_datetime(row['last_update'])
+            days = (pd.to_datetime(f"{datetime.now().year}-12-31") - last_update).days
+            daily_rate = annual_rate / 100 / 365
+            mmf_val = principal * ((1 + daily_rate) ** days)
+        # Stocks
+        stocks_val = 0
+        stocks_pnl = 0
+        if not stocks_df.empty:
+            stocks_df['market_value'] = stocks_df['shares'] * stocks_df['current_price']
+            stocks_df['pnl'] = (stocks_df['current_price'] - stocks_df['purchase_price']) * stocks_df['shares']
+            stocks_val = stocks_df['market_value'].sum()
+            stocks_pnl = stocks_df['pnl'].sum()
+        return {
+            'SACCO': sacco_val,
+            'Bonds': bonds_val,
+            'Crypto': crypto_val,
+            'MMF': mmf_val,
+            'Stocks': stocks_val
+        }
+
+    def get_portfolio_summary():
+        # ...existing code for current totals...
+        sacco_df = fetch_table('sacco') if toggles.get('SACCO', True) else pd.DataFrame()
+        bonds_df = fetch_table('bonds') if toggles.get('Bonds', True) else pd.DataFrame()
+        crypto_df = fetch_table('crypto') if toggles.get('Crypto', True) else pd.DataFrame()
+        mmf_df = fetch_table('mmf') if toggles.get('MMF', True) else pd.DataFrame()
+        stocks_df = fetch_table('stocks') if toggles.get('Stocks', True) else pd.DataFrame()
+        # SACCO
+        sacco_val = 0
+        if not sacco_df.empty:
+            months = len(sacco_df)
+            total_contrib = sacco_df['contribution'].sum()
+            interest_rate = sacco_df['interest_rate'].iloc[0] if 'interest_rate' in sacco_df else 0.13
+            sacco_val = total_contrib * (1 + interest_rate * months / 12)
+        # Bonds
+        bonds_val = 0
+        if not bonds_df.empty:
+            bonds_df['interest'] = bonds_df['principal'] * (bonds_df['rate'] / 100) * (bonds_df['duration_months'] / 12)
+            bonds_val = bonds_df['principal'].sum() + bonds_df['interest'].sum()
+        # Crypto (USD to KES, assume 1 USD = 150 KES for now)
+        crypto_val = 0
+        if not crypto_df.empty:
+            symbols = crypto_df['symbol'].unique().tolist()
+            prices = {s: 0 for s in symbols}
+            try:
+                prices = fetch_crypto_prices(symbols)
+            except Exception:
+                pass
+            crypto_df['current_price'] = crypto_df['symbol'].apply(lambda s: prices.get(s.upper(), 0))
+            crypto_df['market_value'] = crypto_df['amount'] * crypto_df['current_price']
+            crypto_val = crypto_df['market_value'].sum() * 150
+        # MMF
+        mmf_val = 0
+        if not mmf_df.empty:
+            row = mmf_df.iloc[0]
+            principal = row['balance']
+            annual_rate = row['annual_rate']
+            last_update = pd.to_datetime(row['last_update'])
+            days = (datetime.now() - last_update).days
+            daily_rate = annual_rate / 100 / 365
+            mmf_val = principal * ((1 + daily_rate) ** days)
+        # Stocks
+        stocks_val = 0
+        stocks_pnl = 0
+        if not stocks_df.empty:
+            stocks_df['market_value'] = stocks_df['shares'] * stocks_df['current_price']
+            stocks_df['pnl'] = (stocks_df['current_price'] - stocks_df['purchase_price']) * stocks_df['shares']
+            stocks_val = stocks_df['market_value'].sum()
+            stocks_pnl = stocks_df['pnl'].sum()
+        # PnL (simplified)
+        total_val = sacco_val + bonds_val + crypto_val + mmf_val + stocks_val
+        total_pnl = bonds_val + crypto_val + mmf_val + stocks_val + sacco_val - (
+            sacco_df['contribution'].sum() if not sacco_df.empty else 0
+            + bonds_df['principal'].sum() if not bonds_df.empty else 0
+            + crypto_df['amount'].sum() * 0 if not crypto_df.empty else 0
+            + (mmf_df['balance'].sum() if not mmf_df.empty else 0)
+            + stocks_df['purchase_price'].sum() if not stocks_df.empty else 0
+        )
+        asset_vals = {
+            'SACCO': sacco_val,
+            'Bonds': bonds_val,
+            'Crypto': crypto_val,
+            'MMF': mmf_val,
+            'Stocks': stocks_val
+        }
+        best_asset = max(asset_vals, key=asset_vals.get) if total_val > 0 else '-'
+        worst_asset = min(asset_vals, key=asset_vals.get) if total_val > 0 else '-'
+        return total_val, total_pnl, best_asset, worst_asset, asset_vals
+
+    total_val, total_pnl, best_asset, worst_asset, asset_vals = get_portfolio_summary()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Portfolio Value (KES)", f"{total_val:,.2f}")
+    col2.metric("Total Profit/Loss", f"{total_pnl:,.2f}")
+    col3.metric("Best Performing Asset", best_asset)
+    col4.metric("Worst Performing Asset", worst_asset)
+
+    # Asset allocation pie chart
+    pie_df = pd.DataFrame({"Asset": list(asset_vals.keys()), "Value": list(asset_vals.values())})
+    pie_df = pie_df[pie_df['Value'] > 0]
+    if not pie_df.empty:
+        st.plotly_chart(px.pie(pie_df, names="Asset", values="Value", title="Asset Allocation"), use_container_width=True)
+    else:
+        st.info("No assets in portfolio yet.")
+
+    # --- End of Year Totals ---
+    st.subheader(f"End of Year ({datetime.now().year}) Projected Totals")
+    eoy = get_end_of_year_totals()
+    eoy_df = pd.DataFrame({"Asset": list(eoy.keys()), "Projected Value": list(eoy.values())})
+    st.table(eoy_df)
                     st.experimental_rerun()
 with st.sidebar.expander("Money Market Fund"):
     mmf_df = fetch_table('mmf')
