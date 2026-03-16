@@ -728,11 +728,30 @@ with st.sidebar.expander("Stock"):
                     conn.close()
                     st.experimental_rerun()
 
-# --- Main App Body ---
 
+# --- Main Asset Sections (restore all features) ---
+if toggles.get("SACCO", True):
+    # Show SACCO section (history, summary, etc.)
+    sacco_df = fetch_table('sacco')
+    st.header("SACCO Savings")
+    st.write("### Contribution History", sacco_df)
+    if not sacco_df.empty:
+        months = len(sacco_df)
+        total_contrib = sacco_df['contribution'].sum()
+        interest_rate = sacco_df['interest_rate'].iloc[0] if 'interest_rate' in sacco_df else 0.13
+        future_value = total_contrib * (1 + interest_rate * months / 12)
+        st.metric("SACCO Future Value (KES)", f"{future_value:,.2f}")
+    else:
+        st.info("No SACCO contributions yet.")
 
-# --- Main Asset Sections ---
-# (All asset entry and display logic is now handled in the sidebar and dashboard sections above)
+if toggles.get("Bonds", True):
+    bonds_section()
+if toggles.get("Crypto", True):
+    crypto_section()
+if toggles.get("MMF", True):
+    mmf_section()
+if toggles.get("Stocks", True):
+    stocks_section()
 
 # --- AI Analytics Section ---
 ai_analytics_section()
