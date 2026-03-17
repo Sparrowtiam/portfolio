@@ -45,7 +45,8 @@ def stocks_section():
         current_price = st.number_input("Current Price (KES)", min_value=0.0, value=0.0, step=1.0)
         submitted = st.form_submit_button("Add Stock")
         if submitted and shares > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO stocks (ticker, shares, purchase_price, current_price) VALUES (?, ?, ?, ?)", (ticker.upper(), shares, purchase_price, current_price))
             conn.commit()
             conn.close()
@@ -75,7 +76,8 @@ def mmf_section():
         last_update = st.date_input("Last Update", value=datetime.now())
         submitted = st.form_submit_button("Update MMF")
         if submitted:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             # Only one MMF row for simplicity
             conn.execute("DELETE FROM mmf")
             conn.execute("INSERT INTO mmf (name, balance, annual_rate, last_update) VALUES (?, ?, ?, ?)", (name, balance, annual_rate, last_update.strftime('%Y-%m-%d')))
@@ -123,7 +125,8 @@ def crypto_section():
         purchase_price = st.number_input("Purchase Price (USD)", min_value=0.0, value=0.0, step=0.01)
         submitted = st.form_submit_button("Add Crypto")
         if submitted and amount > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO crypto (symbol, amount, purchase_price) VALUES (?, ?, ?)", (symbol.upper(), amount, purchase_price))
             conn.commit()
             conn.close()
@@ -158,7 +161,8 @@ def bonds_section():
         duration_months = st.number_input("Duration (months)", min_value=1, value=12, step=1)
         submitted = st.form_submit_button("Add Bond")
         if submitted and principal > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO bonds (name, principal, rate, start_date, duration_months) VALUES (?, ?, ?, ?, ?)", (name, principal, rate, start_date.strftime('%Y-%m-%d'), duration_months))
             conn.commit()
             conn.close()
@@ -172,51 +176,19 @@ def bonds_section():
     else:
         st.info("No bonds added yet.")
 
-import streamlit as st
-import pandas as pd
+
 import plotly.express as px
-import sqlite3
 import requests
 from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 from database import fetch_table, init_db
-
-DB_NAME = 'portfolio.db'
-
-# Utility functions for DB
-
-def get_connection():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
-
-def fetch_table(table):
-    conn = get_connection()
 init_db()
-    df = pd.read_sql_query(f'SELECT * FROM {table}', conn)
-    conn.close()
-    return df
-
-    try:
-        bonds_df = fetch_table('bonds')
 st.set_page_config(page_title="Kenya Multi-Asset Portfolio Tracker", layout="wide")
-        bonds_df = pd.DataFrame()
 
-# --- Sidebar: Asset Toggles ---
+# --- Sidebar: Asset Toggles (simple, stateless)
 st.sidebar.header("Toggle Asset Classes")
 asset_types = ["SACCO", "Bonds", "Crypto", "MMF", "Stocks"]
-conn = get_connection()
-conn.execute('CREATE TABLE IF NOT EXISTS toggles (asset_type TEXT PRIMARY KEY, enabled INTEGER DEFAULT 1)')
-conn.commit()
-toggle_states = {}
-for asset in asset_types:
-    cur = conn.execute('SELECT enabled FROM toggles WHERE asset_type = ?', (asset,))
-    row = cur.fetchone()
-    default = True if row is None else bool(row[0])
-    toggle = st.sidebar.checkbox(asset, value=default)
-    toggle_states[asset] = toggle
-    conn.execute('INSERT OR REPLACE INTO toggles (asset_type, enabled) VALUES (?, ?)', (asset, int(toggle)))
-conn.commit()
-conn.close()
-toggles = toggle_states
+toggles = {asset: st.sidebar.checkbox(asset, value=True) for asset in asset_types}
 
 
 # --- Main Dashboard Layout ---
@@ -369,7 +341,8 @@ with st.sidebar.expander("SACCO Contribution"):
         contribution = st.number_input("Contribution (KES)", min_value=0.0, value=0.0, step=100.0, key="sacco_contrib")
         submitted = st.form_submit_button("Add Contribution")
         if submitted and contribution > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO sacco (month, year, contribution) VALUES (?, ?, ?)", (month, year, contribution))
             conn.commit()
             conn.close()
@@ -384,7 +357,8 @@ with st.sidebar.expander("Government Bond"):
         duration_months = st.number_input("Duration (months)", min_value=1, value=12, step=1, key="bond_duration")
         submitted = st.form_submit_button("Add Bond")
         if submitted and principal > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO bonds (name, principal, rate, start_date, duration_months) VALUES (?, ?, ?, ?, ?)", (name, principal, rate, start_date.strftime('%Y-%m-%d'), duration_months))
             conn.commit()
             conn.close()
@@ -397,7 +371,8 @@ with st.sidebar.expander("Cryptocurrency"):
         purchase_price = st.number_input("Purchase Price (USD)", min_value=0.0, value=0.0, step=0.01, key="crypto_price")
         submitted = st.form_submit_button("Add Crypto")
         if submitted and amount > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO crypto (symbol, amount, purchase_price) VALUES (?, ?, ?)", (symbol.upper(), amount, purchase_price))
             conn.commit()
             conn.close()
@@ -411,7 +386,8 @@ with st.sidebar.expander("Money Market Fund"):
         last_update = st.date_input("Last Update", value=datetime.now(), key="mmf_update")
         submitted = st.form_submit_button("Update MMF")
         if submitted:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("DELETE FROM mmf")
             conn.execute("INSERT INTO mmf (name, balance, annual_rate, last_update) VALUES (?, ?, ?, ?)", (name, balance, annual_rate, last_update.strftime('%Y-%m-%d')))
             conn.commit()
@@ -426,7 +402,8 @@ with st.sidebar.expander("Stock"):
         current_price = st.number_input("Current Price (KES)", min_value=0.0, value=0.0, step=1.0, key="stock_current")
         submitted = st.form_submit_button("Add Stock")
         if submitted and shares > 0:
-            conn = get_connection()
+            import sqlite3
+            conn = sqlite3.connect("portfolio.db")
             conn.execute("INSERT INTO stocks (ticker, shares, purchase_price, current_price) VALUES (?, ?, ?, ?)", (ticker.upper(), shares, purchase_price, current_price))
             conn.commit()
             conn.close()
